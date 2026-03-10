@@ -5,10 +5,11 @@ Abstract interfaces that define the contracts for data persistence.
 These are implemented by the infrastructure layer following Dependency Inversion.
 """
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 
 from .entities import Document, Chunk, Vector, GraphEntity, Relationship, DataSource
+from .services.chunking_service import ChunkLocator
 
 
 class DocumentRepositoryInterface(ABC):
@@ -57,11 +58,16 @@ class DocumentRepositoryInterface(ABC):
 
 
 class ChunkRepositoryInterface(ABC):
-    """Abstract interface for chunk persistence."""
+    """Abstract interface for chunk persistence with locator support."""
     
     @abstractmethod
     async def create(self, chunk: Chunk) -> Chunk:
         """Create a new chunk record."""
+        pass
+    
+    @abstractmethod
+    async def create_batch(self, chunks: List[Chunk]) -> List[Chunk]:
+        """Create multiple chunk records in a batch."""
         pass
     
     @abstractmethod
@@ -82,6 +88,21 @@ class ChunkRepositoryInterface(ABC):
     @abstractmethod
     async def delete_by_document(self, document_id: UUID) -> int:
         """Delete all chunks for a document."""
+        pass
+    
+    @abstractmethod
+    async def get_locators_by_ids(self, chunk_ids: List[UUID]) -> Dict[UUID, ChunkLocator]:
+        """Get locators for multiple chunks. Returns dict of chunk_id -> locator."""
+        pass
+    
+    @abstractmethod
+    async def search_by_content(
+        self,
+        query: str,
+        document_id: Optional[UUID] = None,
+        limit: int = 10,
+    ) -> List[Chunk]:
+        """Search chunks by content similarity."""
         pass
 
 
