@@ -1,0 +1,174 @@
+version: "3.8"
+
+services:
+  # ===========================================
+  # PostgreSQL with pgvector extension
+  # ===========================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pmo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lightrag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lightrag_password}
+      POSTGRES_DB: ${POSTGRES_DB:-lightrag_db}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/modules/knowledge/infrastructure/database/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lightrag} -d ${POSTGRES_DB:-lightrag_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pmo-network
+
+  # ===========================================
+  # FalkorDB (Redis Graph) for Knowledge Graph
+  # ===========================================
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: pmo-falkordb
+    restart: unless-stopped
+    environment:
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD:-}
+    ports:
+      - "${FALKORDB_PORT:-6379}:6379"
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pmo-network
+
+  # ===========================================
+  # Redis for Caching & Task Queue
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: pmo-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pmo-network
+
+  # ===========================================
+  # FastAPI Application
+  # ===========================================
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: pmo-api
+    restart: unless-stopped
+    environment:
+      # PostgreSQL
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-lightrag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lightrag_password}
+      POSTGRES_DB: ${POSTGRES_DB:-lightrag_db}
+      # FalkorDB
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: 6379
+      FALKORDB_PASSWORD: ${FALKORDB_PASSWORD:-}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # LLM
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-accounts/fireworks/models/llama-v3p1-70b-instruct}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.fireworks.ai/inference/v1}
+      # Embedding
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-ai/nomic-embed-text-v1.5}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-768}
+      # LightRAG
+      LIGHTRAG_WORKING_DIR: /app/rag_storage
+      LIGHTRAG_WORKSPACE: ${LIGHTRAG_WORKSPACE:-default}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./rag_storage:/app/rag_storage
+      - ./poc/data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      falkordb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pmo-network
+
+  # ===========================================
+  # Worker for Background Tasks (Optional)
+  # ===========================================
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: pmo-worker
+    restart: unless-stopped
+    environment:
+      # PostgreSQL
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-lightrag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lightrag_password}
+      POSTGRES_DB: ${POSTGRES_DB:-lightrag_db}
+      # FalkorDB
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: 6379
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # LLM
+      FIREWORKS_API_KEY: ${FIREWORKS_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-accounts/fireworks/models/llama-v3p1-70b-instruct}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.fireworks.ai/inference/v1}
+      # LightRAG
+      LIGHTRAG_WORKING_DIR: /app/rag_storage
+    volumes:
+      - ./rag_storage:/app/rag_storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pmo-network
+    profiles:
+      - worker
+
+# ===========================================
+# Networks
+# ===========================================
+networks:
+  pmo-network:
+    driver: bridge
+
+# ===========================================
+# Volumes
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  falkordb_data:
+    driver: local
+  redis_data:
+    driver: local
