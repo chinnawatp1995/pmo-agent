@@ -8,7 +8,10 @@ import hashlib
 import logging
 from datetime import datetime
 from typing import Optional, List
-from uuid import UUID, uuid4, NIL_UUID
+from uuid import UUID, uuid4
+
+# NIL_UUID for Python < 3.11 compatibility
+NIL_UUID = UUID('00000000-0000-0000-0000-000000000000')
 
 from ...domain.entities import Document, DocumentStatus, DocumentType, DataSourceType, Chunk
 from ...domain.repository_interfaces import (

@@ -5,7 +5,10 @@ All domain entities extend from this base model to inherit
 common audit fields for tracking creation, updates, and deletion.
 """
 from datetime import datetime
-from uuid import UUID, uuid4, NIL_UUID
+from uuid import UUID, uuid4
+
+# NIL_UUID for Python < 3.11 compatibility
+NIL_UUID = UUID('00000000-0000-0000-0000-000000000000')
 from typing import Optional
 
 from pydantic import BaseModel as PydanticBaseModel, Field

@@ -15,7 +15,7 @@ LightRAG's internal storage handles:
 """
 from .base import BaseModel
 from .data_source import DataSource, DataSourceType
-from .document import Document, DocumentType
+from .document import Document, DocumentType, DocumentStatus
 
 # Optional - kept for potential custom analytics outside LightRAG
 from .chunk import Chunk
@@ -30,6 +30,7 @@ __all__ = [
     "DataSourceType",
     "Document",
     "DocumentType",
+    "DocumentStatus",
     # Optional entities (LightRAG manages these internally)
     "Chunk",
     "Vector",
